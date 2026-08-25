@@ -1,0 +1,10 @@
+GET http://127.0.0.1:5000
+
+###
+
+POST http://127.0.0.1:5000/chatbot
+Content-Type: application/json
+
+{
+  "prompt": "What is artificial intelligence?"
+}
