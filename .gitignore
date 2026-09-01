@@ -1,0 +1,58 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+env_*/
+.venv/
+venv/
+ENV/
+
+# Packaging and build artifacts
+.Python
+build/
+dist/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Type checkers and linters
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# Flask and local runtime files
+instance/
+.webassets-cache/
+*.log
+
+# Environment variables and local configuration
+.env
+.env.*
+!.env.example
+
+# IDE and editor files
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.code-workspace
+
+# Hugging Face and local model caches
+.cache/
+huggingface/
+models/
+
+# Operating system files
+.DS_Store
+Thumbs.db
