@@ -1,141 +1,31 @@
 # 🤖 AI Chat Assistant
 
-![Python](https://img.shields.io/badge/Python-3.10-blue)
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-DeepLearning-red)
 ![Transformers](https://img.shields.io/badge/Transformers-HuggingFace-yellow)
 ![Flask](https://img.shields.io/badge/Flask-WebAPI-black)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-A conversational chatbot powered by [Facebook BlenderBot-400M-distill](https://huggingface.co/facebook/blenderbot-400M-distill), served through a Flask REST API with a responsive web UI.
+## 1. Overview
 
----
+A conversational chatbot built with Python and Flask that runs the open-domain dialogue model
+[Facebook BlenderBot-400M-distill](https://huggingface.co/facebook/blenderbot-400M-distill) fully locally.
+It keeps a short conversational memory per user and can be used from a web chat UI, a JSON REST API or the terminal.
 
-## ✨ Features
+The model sits behind a common `ChatEngine` interface, so the dialogue engine can be swapped
+(e.g. for another Hugging Face model or a hosted LLM) without touching the web or CLI layers.
 
-- Conversational AI with short-term memory (last 6 exchanges)
-- Web interface accessible via browser
-- CLI mode for terminal interaction
-- CORS enabled for cross-origin requests
+## 2. Features
 
----
+- Clean web chat UI with loading indicator and error messages.
+- JSON REST endpoint (`POST /chatbot`) that other clients can consume.
+- Short-term conversational memory (last 3 exchanges), isolated **per user** through a signed session cookie.
+- CLI mode that reuses the same conversation logic as the web app.
+- Pluggable engines through an abstract `ChatEngine` interface.
+- Input validation on both the client and the server.
+- Unit tests for the conversation logic and the Flask routes (model mocked), plus opt-in tests for the real model.
 
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Python 3.10 |
-| AI Model | Facebook BlenderBot (`blenderbot-400M-distill`) |
-| ML Framework | PyTorch |
-| Model Hub | Hugging Face Transformers |
-| Web Framework | Flask + Flask-CORS |
-| Frontend | HTML, CSS, JavaScript (Fetch API) |
-
----
-
-## 🏗️ Architecture
-
-```text
-                    ┌─────────────┐     ┌──────────────┐
-                    │   app.py    │     │  chatbot.py  │
-                    │ (Flask API) │     │    (CLI)     │
-                    └──────┬──────┘     └──────┬───────┘
-                           │                   │
-                           └────────┬──────────┘
-                                    ↓
-                                 bot.py
-                      (model + generate_response)
-                                    ↓
-              Conversation history + prompt string
-                                    ↓
-              AutoTokenizer   ← encodes prompt into tensors
-                                    ↓
-              BlenderBot.generate()  ← seq2seq with torch.no_grad()
-                                    ↓
-              tokenizer.decode()
-                                    ↓
-                           Response (text)
-```
-
----
-
-## 📂 Project Structure
-
-```
-chat-bot/
-├── app.py           # Flask web server and /chatbot API endpoint
-├── bot.py           # shared model: loads BlenderBot and exposes generate_response()
-├── chatbot.py       # CLI mode (run directly in terminal)
-├── requirements.txt # Python dependencies
-├── templates/
-│   └── index.html   # Chat UI
-└── static/
-    ├── script.js    # Frontend logic (fetch API calls)
-    └── css/
-        └── style.css
-```
-
----
-
-## 📋 Requirements
-
-- Python 3.10+
-- Dependencies:
-
-```
-torch==2.13.0
-Flask==3.1.3
-flask-cors==6.0.5
-transformers==5.15.1
-truststore==0.10.4
-```
-
-## 🚀 Installation
-
-```bash
-# Clone the repository
-git clone <repo-url>
-cd chat-bot
-
-# Create and activate virtual environment
-python -m venv env
-source env/bin/activate        # Linux/macOS
-env\Scripts\activate           # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
----
-
-## 📖 Usage
-
-### Web Server
-
-```bash
-python app.py
-```
-
-Open [http://localhost:5000](http://localhost:5000) in your browser.
-
-**API endpoint:**
-
-```http
-POST /chatbot
-Content-Type: application/json
-
-{ "prompt": "Hello, how are you?" }
-```
-
-### CLI Mode
-
-```bash
-python chatbot.py
-```
-
-Type your message and press Enter. Type `exit` to quit.
-
----
-
-## 🎬 Demo
+## 3. Demo
 
 ### Web Chat (empty state)
 
@@ -155,80 +45,198 @@ Type your message and press Enter. Type `exit` to quit.
 
 [Watch the demo on YouTube](https://youtu.be/UvrXL9aLWX8)
 
-```html
-<iframe
-    width="560"
-    height="315"
-    src="https://www.youtube.com/embed/UvrXL9aLWX8"
-    title="YouTube video player"
-    frameborder="0"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-    referrerpolicy="strict-origin-when-cross-origin"
-    allowfullscreen>
-</iframe>
+## 4. Architecture
+
+The app follows a simple layered design. The Flask app and the CLI depend only on `Conversation`
+and the `ChatEngine` abstraction; `BlenderBotEngine` is the concrete implementation.
+
+```mermaid
+flowchart TD
+    UI["Web UI<br/>(index.html + script.js)"] -->|"POST /chatbot"| API["app.py<br/>(Flask API)"]
+    CLI["cli.py<br/>(terminal)"] --> CONV
+    API -->|"history from session cookie"| CONV["Conversation<br/>(rolling history + prompt)"]
+    CONV -->|"generate(prompt)"| ENGINE["ChatEngine<br/>(abstract interface)"]
+    ENGINE -.implements.- BB["BlenderBotEngine<br/>(tokenizer → generate → decode)"]
 ```
 
----
+Request flow:
 
+1. The user types a message and presses **Enter**.
+2. `script.js` sends `POST /chatbot` with `{ "prompt": "..." }`.
+3. `app.py` validates the input and restores the user's history from the session cookie.
+4. `Conversation` builds the prompt (`User: ... / Bot: ...` lines) and calls `engine.generate(prompt)`.
+5. `BlenderBotEngine` tokenizes the prompt (max 128 tokens), generates up to 60 new tokens with
+   nucleus sampling and decodes the reply.
+6. The updated history is saved back to the session and the reply is returned as JSON.
 
-## 📝 Example
+## 5. Tech Stack
 
-**Input:** `What's the meaning of life?`
+| Layer | Technology |
+|---|---|
+| Backend | Python, Flask, Flask-CORS |
+| NLP / ML | Hugging Face Transformers, PyTorch |
+| Model | `facebook/blenderbot-400M-distill` |
+| Frontend | HTML, CSS, Bootstrap, vanilla JavaScript (Fetch API) |
+| Testing | unittest |
 
-**Output:**
+## 6. Project Structure
+
 ```
-I think it depends on who you ask. Some people say it's happiness, others say purpose.
+chat-bot/
+├── app.py                         # Flask app factory and routes
+├── cli.py                         # Terminal chat
+├── requirements.txt
+├── test_api.http                  # Sample HTTP requests (VS Code REST Client)
+├── assets/                        # Screenshots used in this README
+├── chatbot/
+│   ├── engine.py                  # ChatEngine abstract base class
+│   ├── conversation.py            # Rolling history + prompt building
+│   └── implementations/
+│       └── blenderbot_engine.py   # BlenderBot implementation
+├── static/
+│   ├── css/style.css
+│   ├── images/
+│   └── js/script.js
+├── templates/
+│   └── index.html
+└── tests/
+    ├── test_app.py
+    ├── test_conversation.py
+    └── test_blenderbot_engine.py
 ```
 
----
-
-## 🤖 Model
+## 7. Model
 
 | Property | Value |
 |---|---|
-| Model | `facebook/blenderbot-400M-distill` |
-| Task | Open-domain Dialogue |
+| Model | [`facebook/blenderbot-400M-distill`](https://huggingface.co/facebook/blenderbot-400M-distill) |
+| Task | Open-domain dialogue |
 | Type | Seq2Seq (encoder-decoder) |
-| Framework | Hugging Face Transformers |
-| Backend | PyTorch |
-| Max input tokens | 128 |
-| Max output tokens | 60 |
 | Parameters | ~400M |
+| Max input tokens | 128 (older history is truncated) |
+| Max output tokens | 60 |
 
-The model is downloaded automatically from Hugging Face on first run.
+Generation settings: `do_sample=True`, `temperature=0.6`, `top_p=0.85`, `repetition_penalty=1.3`,
+`no_repeat_ngram_size=3`. These keep the replies varied but focused and avoid the repetitive loops
+that small dialogue models tend to fall into.
 
----
+- Inference runs under `torch.no_grad()` with the model in `eval()` mode.
+- The model is downloaded on first run and cached locally; after that it works offline.
+- `truststore` is used so the download also works behind corporate proxies that perform SSL inspection.
 
-## 🎯 What I Practiced
+## 8. Running Locally
 
-- Integrating a pre-trained Transformer model into a real web application
-- Working with the Hugging Face `transformers` API (`AutoTokenizer`, `AutoModelForSeq2SeqLM`)
-- Building a REST API with Flask and connecting it to a vanilla JS frontend
-- Managing conversational context with sliding window history
-- Decoupling model logic into a shared module consumed by both the API and CLI
+Prerequisites: Python 3.10+ and `pip`.
 
----
+```bash
+git clone https://github.com/yesithv/chat-bot.git
+cd chat-bot
 
-## 🔮 Roadmap
+python -m venv .venv
 
-- [ ] Streaming responses for real-time output
-- [ ] Multi-language support
-- [ ] REST API documentation with Swagger
-- [ ] Deployment on Hugging Face Spaces or Render
-- [ ] Support for larger dialogue models (BlenderBot-3B, DialoGPT)
+# Windows
+.venv\Scripts\activate
+# Linux / macOS
+source .venv/bin/activate
 
----
+pip install -r requirements.txt
+```
 
-## 📜 License
+**Web app:**
 
-This project is licensed under the MIT License.
+```bash
+python app.py
+```
 
----
+Open [http://localhost:5000](http://localhost:5000) in your browser.
 
-## 👨‍💻 Author
+> The first run downloads the BlenderBot model (~730 MB) from Hugging Face, so it may take a few minutes.
 
-**Yesith Valencia**
+Optionally set a `SECRET_KEY` environment variable to sign the session cookie; otherwise a random
+key is generated on each start (conversations reset when the server restarts).
 
-Software Engineer passionate about AI, Generative AI, and Cloud Technologies.
+**CLI:**
+
+```bash
+python cli.py
+```
+
+Type your message and press Enter. Type `exit` to quit.
+
+To add a new engine, create a class that inherits from `ChatEngine`, implement
+`generate(prompt: str) -> str` and pass an instance to `create_app()` in [app.py](app.py).
+
+## 9. Running Tests
+
+```bash
+python -m unittest discover tests
+```
+
+The app and conversation tests use a fake engine, so they run in milliseconds without downloading the model.
+To also run the tests that load the real BlenderBot model:
+
+```bash
+# Windows (PowerShell)
+$env:RUN_MODEL_TESTS="1"; python -m unittest discover tests
+# Linux / macOS
+RUN_MODEL_TESTS=1 python -m unittest discover tests
+```
+
+## 10. API
+
+### `POST /chatbot`
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | User message (1–500 characters) |
+
+Success (`200 OK`):
+
+```json
+{
+  "response": "I think it depends on who you ask. Some people say it's happiness, others say purpose."
+}
+```
+
+Error (`400 Bad Request`) when the message is missing, empty or too long:
+
+```json
+{
+  "error": "Invalid message! Please type something."
+}
+```
+
+Example:
+
+```bash
+curl -X POST http://localhost:5000/chatbot \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "What is the meaning of life?"}'
+```
+
+## 11. What I Learned
+
+- Integrating a pre-trained seq2seq Transformer into a web application with `AutoTokenizer` and `AutoModelForSeq2SeqLM`.
+- Tuning text generation (sampling, temperature, top-p, repetition penalties) to improve reply quality.
+- Managing conversational context with a sliding window under a fixed token budget.
+- Keeping per-user state in a stateless API with signed session cookies instead of global variables.
+- Applying the Strategy pattern with abstract base classes to decouple the web/CLI layers from the model.
+- Testing ML-backed applications by mocking the model, keeping slow model tests opt-in.
+
+## 12. Future Improvements
+
+- Stream responses token by token for real-time output.
+- Select the engine through an environment variable instead of editing code.
+- Add an engine for a modern instruction-tuned LLM (local or hosted) behind the same interface.
+- Multi-language support.
+- Containerize the app with Docker and deploy it to Hugging Face Spaces or Render.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+## Author
+
+**Yesith Valencia** — Software Engineer passionate about AI, Generative AI, and Cloud Technologies.
 
 [GitHub Portfolio](https://yesithv.github.io/)

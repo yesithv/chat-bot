@@ -1,6 +1,3 @@
-let savedpasttext = []; // Variable to store the message
-let savedpastresponse = []; // Variable to store the message
-
 // Section: get the Id of the talking container
 const messagesContainer = document.getElementById('messages-container');
 const messageForm = document.getElementById('message-form');
@@ -31,8 +28,7 @@ const addMessage = (message, role, imgSrc) => {
 
 //Section: Calling the model
 const sendMessage = async (message) => {
-  // addMessage(message, 'user','man.png');
-  addMessage(message, 'user','../static/images/man.png');
+  addMessage(message, 'user', '/static/images/man.png');
   // Loading animation
   const loadingElement = document.createElement('div');
   const loadingtextElement = document.createElement('p');
@@ -43,55 +39,32 @@ const sendMessage = async (message) => {
   messagesContainer.appendChild(loadingtextElement);
 
   async function makePostRequest(msg) {
-    const url = '/chatbot';  // Make a POST request to this url
-    const requestBody = {
-      prompt: msg
-    };
-  
     try {
-      const response = await fetch(url, {
+      const response = await fetch('/chatbot', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ prompt: msg })
       });
-  
-      const data = await response.text();
-      // Handle the response data here
-      console.log(data);
-      return data;
+      return await response.json();
     } catch (error) {
-      // Handle any errors that occurred during the request
       console.error('Error:', error);
-      return error
+      return { error: 'Could not reach the server. Please try again.' };
     }
   }
-  
-  var res = await makePostRequest(message);
-  
-  data = {"response": res};
-  
+
+  const data = await makePostRequest(message);
+
   // Deleting the loading animation
-  const loadanimation = document.querySelector('.loading-animation');
-  const loadtxt = document.querySelector('.loading-text');
-  loadanimation.remove();
-  loadtxt.remove();
+  loadingElement.remove();
+  loadingtextElement.remove();
 
   if (data.error) {
-    // Handle the error here
-    const errorMessage = JSON.stringify(data);
-    // addMessage(errorMessage, 'error','Error.png');
-    addMessage(errorMessage, 'error','../static/images/Error.png');
+    addMessage(data.error, 'error', '/static/images/Error.png');
   } else {
-    // Process the normal response here
-    const responseMessage = data['response'];
-    // addMessage(responseMessage, 'aibot','chat-bot.png');
-    addMessage(responseMessage, 'aibot','../static/images/chat-bot.png');
+    addMessage(data.response, 'aibot', '/static/images/chat-bot.png');
   }
-  
-  //!!!!! code to  save the content in history
-  //
 };
 //
 

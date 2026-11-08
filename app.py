@@ -1,37 +1,45 @@
-from flask import Flask, request, render_template
+import os
+import secrets
+
+from flask import Flask, jsonify, render_template, request, session
 from flask_cors import CORS
-from bot import generate_response
 
-app = Flask(__name__)
-CORS(app)
+from chatbot.conversation import Conversation
+from chatbot.engine import ChatEngine
 
-conversation_history = []
+MAX_PROMPT_LENGTH = 500
 
-@app.route('/chatbot', methods = ['POST'])
-def handle_prompt():
-    # Read prompt from HTTP request body
-    data = request.get_json()
-    input_text = data['prompt']
 
-    # Keep only the recent conversation
-    conversation_history[:] = conversation_history[-6:]
+def create_app(engine: ChatEngine) -> Flask:
+    app = Flask(__name__)
+    # Signs the session cookie that stores each user's conversation history
+    app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+    CORS(app)
 
-    # Create conversation history string
-    history = "\n".join(conversation_history)
-    prompt = history + f"\nUser: {input_text}\nBot:"
+    @app.get('/')
+    def home():
+        return render_template('index.html')
 
-    response = generate_response(prompt)
+    @app.post('/chatbot')
+    def chat():
+        data = request.get_json(silent=True) or {}
+        prompt = data.get('prompt')
 
-    # Add interaction to conversation history
-    conversation_history.append(f"User: {input_text}")
-    conversation_history.append(f"Bot : {response}")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return jsonify(error='Invalid message! Please type something.'), 400
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            return jsonify(error=f'Message too long! Maximum {MAX_PROMPT_LENGTH} characters.'), 400
 
-    return response
+        conversation = Conversation(engine, session.get('history'))
+        response = conversation.reply(prompt.strip())
+        session['history'] = conversation.history
 
-@app.route('/', methods=['GET'])
-def home():
-    return render_template('index.html')
+        return jsonify(response=response)
+
+    return app
 
 
 if __name__ == '__main__':
-    app.run()
+    from chatbot.implementations.blenderbot_engine import BlenderBotEngine
+
+    create_app(BlenderBotEngine()).run()
